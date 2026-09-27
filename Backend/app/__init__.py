@@ -62,3 +62,7 @@ def create_app():
         pass
 
     return app
+
+
+# Module-level WSGI instance for runners like 'gunicorn app:app'
+app = create_app()
