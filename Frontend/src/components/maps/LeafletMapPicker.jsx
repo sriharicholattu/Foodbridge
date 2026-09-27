@@ -43,10 +43,35 @@ export default function LeafletMapPicker({
   const [gpsError, setGpsError] = useState("");
 
   useEffect(() => {
-    if (latitude && longitude) {
-      setPosition([Number(latitude), Number(longitude)]);
+    if (latitude != null && longitude != null && !isNaN(Number(latitude)) && !isNaN(Number(longitude))) {
+      const newPos = [Number(latitude), Number(longitude)];
+      if (Math.abs(position[0] - newPos[0]) > 0.0001 || Math.abs(position[1] - newPos[1]) > 0.0001) {
+        setPosition(newPos);
+      }
     }
   }, [latitude, longitude]);
+
+  useEffect(() => {
+    if (initialAddress && initialAddress !== searchQuery) {
+      setSearchQuery(initialAddress);
+    }
+  }, [initialAddress]);
+
+  // Attempt current position on first mount if coordinates not supplied
+  useEffect(() => {
+    if ((latitude == null || longitude == null) && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          setPosition([lat, lng]);
+          reverseGeocode(lat, lng);
+        },
+        () => {},
+        { timeout: 6000, maximumAge: 120000 }
+      );
+    }
+  }, []);
 
   // Reverse geocoding via OpenStreetMap Nominatim
   const reverseGeocode = async (lat, lng) => {

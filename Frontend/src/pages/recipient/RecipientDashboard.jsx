@@ -1,13 +1,50 @@
 import React, { useState, useEffect } from "react";
 import api from "../../services/api";
-import { Check, X, Sparkles, MapPin, Package, Clock, ShieldCheck, ListPlus } from "lucide-react";
+import { useAuth } from "../../context/AuthContext";
+import { Check, X, Sparkles, MapPin, Package, Clock, ShieldCheck, ListPlus, Navigation, Save, ChevronDown, ChevronUp } from "lucide-react";
+import LeafletMapPicker from "../../components/maps/LeafletMapPicker";
+import { getGoogleMapsDirectionsUrl } from "../../components/maps/GoogleMapViewer";
+
+function calculateKm(lat1, lon1, lat2, lon2) {
+  if (!lat1 || !lon1 || !lat2 || !lon2) return null;
+  const r = 6371.0;
+  const dlat = ((lat2 - lat1) * Math.PI) / 180;
+  const dlon = ((lon2 - lon1) * Math.PI) / 180;
+  const a =
+    Math.sin(dlat / 2) ** 2 +
+    Math.cos((lat1 * Math.PI) / 180) *
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dlon / 2) ** 2;
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  return Math.round(r * c * 10) / 10;
+}
 
 export default function RecipientDashboard() {
+  const { user } = useAuth();
   const [matches, setMatches] = useState([]);
   const [requirements, setRequirements] = useState([]);
   const [loading, setLoading] = useState(true);
   const [submittingReq, setSubmittingReq] = useState(false);
+  const [savingLocation, setSavingLocation] = useState(false);
   const [feedback, setFeedback] = useState("");
+  const [showLocationSettings, setShowLocationSettings] = useState(false);
+
+  // Recipient shelter location state
+  const [shelterLocation, setShelterLocation] = useState({
+    address: user?.address || "",
+    latitude: user?.latitude ?? null,
+    longitude: user?.longitude ?? null,
+  });
+
+  useEffect(() => {
+    if (user) {
+      setShelterLocation({
+        address: user.address || "",
+        latitude: user.latitude ?? null,
+        longitude: user.longitude ?? null,
+      });
+    }
+  }, [user]);
 
   const [reqForm, setReqForm] = useState({
     food_type: "",
@@ -40,7 +77,7 @@ export default function RecipientDashboard() {
     setFeedback("");
     try {
       await api.post("/matching/requirements", reqForm);
-      setFeedback("Food requirement created! Matches will be scored automatically.");
+      setFeedback("Food requirement saved! Matches have been refreshed automatically.");
       setReqForm({ food_type: "", quantity_needed: "", pickup_available: false });
       fetchData();
     } catch (err) {
@@ -50,10 +87,33 @@ export default function RecipientDashboard() {
     }
   };
 
+  const handleSaveLocation = async (e) => {
+    e.preventDefault();
+    setSavingLocation(true);
+    setFeedback("");
+    try {
+      const res = await api.patch("/auth/profile", {
+        address: shelterLocation.address,
+        latitude: shelterLocation.latitude,
+        longitude: shelterLocation.longitude,
+      });
+      if (res.data.user) {
+        localStorage.setItem("user", JSON.stringify(res.data.user));
+      }
+      setFeedback("Shelter location updated! Match distances have been recalculated.");
+      setShowLocationSettings(false);
+      fetchData();
+    } catch (err) {
+      alert("Failed to update shelter location: " + (err.response?.data?.error || err.message));
+    } finally {
+      setSavingLocation(false);
+    }
+  };
+
   const handleRespond = async (matchId, decision) => {
     try {
       await api.post(`/matching/${matchId}/respond`, { status: decision });
-      setFeedback(`Match ${decision === "accepted" ? "accepted! Volunteers can now be assigned for pickup." : "declined."}`);
+      setFeedback(`Match ${decision === "accepted" ? "accepted! Volunteers can now be assigned for transport." : "declined."}`);
       fetchData();
     } catch (err) {
       alert("Error responding to match");
@@ -75,6 +135,82 @@ export default function RecipientDashboard() {
           <span>{feedback}</span>
         </div>
       )}
+
+      {/* Shelter Location Configuration Bar */}
+      <div className="card" style={{ marginBottom: "2rem", border: "1px solid var(--border)" }}>
+        <div
+          onClick={() => setShowLocationSettings(!showLocationSettings)}
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            cursor: "pointer",
+            userSelect: "none",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: "0.6rem" }}>
+            <MapPin size={20} color="var(--primary)" />
+            <div>
+              <strong style={{ fontSize: "1rem" }}>Shelter Location & GPS Pin</strong>
+              <div style={{ fontSize: "0.8rem", color: "var(--text-muted)" }}>
+                Current: {shelterLocation.address || "No address pinned"}
+                {shelterLocation.latitude && shelterLocation.longitude && (
+                  <span> ({Number(shelterLocation.latitude).toFixed(4)}, {Number(shelterLocation.longitude).toFixed(4)})</span>
+                )}
+              </div>
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary btn-sm"
+            style={{ display: "flex", alignItems: "center", gap: "0.3rem" }}
+          >
+            <span>{showLocationSettings ? "Hide Map" : "Change Location"}</span>
+            {showLocationSettings ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+          </button>
+        </div>
+
+        {showLocationSettings && (
+          <form onSubmit={handleSaveLocation} style={{ marginTop: "1.25rem", borderTop: "1px solid var(--border)", paddingTop: "1.25rem" }}>
+            <div className="form-group" style={{ marginBottom: "1rem" }}>
+              <label className="form-label">Shelter Street Address</label>
+              <input
+                type="text"
+                className="form-input"
+                placeholder="e.g. 12th Cross, Indiranagar, Bangalore"
+                value={shelterLocation.address}
+                onChange={(e) => setShelterLocation({ ...shelterLocation, address: e.target.value })}
+              />
+            </div>
+
+            <div style={{ marginBottom: "1rem" }}>
+              <LeafletMapPicker
+                latitude={shelterLocation.latitude}
+                longitude={shelterLocation.longitude}
+                onLocationSelect={({ latitude, longitude, address }) => {
+                  setShelterLocation((prev) => ({
+                    ...prev,
+                    latitude,
+                    longitude,
+                    address: address || prev.address,
+                  }));
+                }}
+                initialAddress={shelterLocation.address}
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="btn btn-primary"
+              disabled={savingLocation}
+              style={{ display: "inline-flex", alignItems: "center", gap: "0.4rem" }}
+            >
+              <Save size={16} />
+              {savingLocation ? "Saving..." : "Save Shelter Location"}
+            </button>
+          </form>
+        )}
+      </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1.2fr 2fr", gap: "2rem", alignItems: "start" }}>
         {/* Requirements Column */}
@@ -183,6 +319,12 @@ export default function RecipientDashboard() {
               {matches.map((m) => {
                 const donation = m.donation || {};
                 const scorePercent = Math.round(m.match_score || 0);
+                const distanceKm = calculateKm(
+                  shelterLocation.latitude,
+                  shelterLocation.longitude,
+                  donation.latitude,
+                  donation.longitude
+                );
 
                 return (
                   <div key={m.id} className="card" style={{
@@ -199,19 +341,26 @@ export default function RecipientDashboard() {
                         </p>
                       </div>
 
-                      <div style={{
-                        background: "var(--primary-light)",
-                        color: "var(--primary)",
-                        padding: "0.35rem 0.75rem",
-                        borderRadius: "var(--radius-full)",
-                        fontWeight: 700,
-                        fontSize: "0.85rem",
-                        display: "flex",
-                        alignItems: "center",
-                        gap: "0.3rem"
-                      }}>
-                        <Sparkles size={14} />
-                        {scorePercent}% Fit Score
+                      <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                        {distanceKm !== null && (
+                          <span style={{ fontSize: "0.8rem", color: "var(--primary)", fontWeight: 600 }}>
+                            {distanceKm} km away
+                          </span>
+                        )}
+                        <div style={{
+                          background: "var(--primary-light)",
+                          color: "var(--primary)",
+                          padding: "0.35rem 0.75rem",
+                          borderRadius: "var(--radius-full)",
+                          fontWeight: 700,
+                          fontSize: "0.85rem",
+                          display: "flex",
+                          alignItems: "center",
+                          gap: "0.3rem"
+                        }}>
+                          <Sparkles size={14} />
+                          {scorePercent}% Fit Score
+                        </div>
                       </div>
                     </div>
 
@@ -238,23 +387,38 @@ export default function RecipientDashboard() {
                       )}
                     </div>
 
-                    {m.status === "suggested" && (
-                      <div style={{ display: "flex", gap: "0.75rem", justifyContent: "flex-end" }}>
-                        <button
-                          onClick={() => handleRespond(m.id, "rejected")}
+                    <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                      {donation.latitude && donation.longitude ? (
+                        <a
+                          href={getGoogleMapsDirectionsUrl(donation.latitude, donation.longitude, donation.pickup_location)}
+                          target="_blank"
+                          rel="noopener noreferrer"
                           className="btn btn-secondary btn-sm"
-                          style={{ color: "var(--danger)" }}
+                          style={{ fontSize: "0.75rem", display: "inline-flex", alignItems: "center", gap: "0.3rem" }}
                         >
-                          <X size={16} /> Decline
-                        </button>
-                        <button
-                          onClick={() => handleRespond(m.id, "accepted")}
-                          className="btn btn-primary btn-sm"
-                        >
-                          <Check size={16} /> Accept Donation
-                        </button>
-                      </div>
-                    )}
+                          <Navigation size={12} color="var(--primary)" />
+                          View Donor Location
+                        </a>
+                      ) : <span />}
+
+                      {m.status === "suggested" && (
+                        <div style={{ display: "flex", gap: "0.75rem" }}>
+                          <button
+                            onClick={() => handleRespond(m.id, "rejected")}
+                            className="btn btn-secondary btn-sm"
+                            style={{ color: "var(--danger)" }}
+                          >
+                            <X size={16} /> Decline
+                          </button>
+                          <button
+                            onClick={() => handleRespond(m.id, "accepted")}
+                            className="btn btn-primary btn-sm"
+                          >
+                            <Check size={16} /> Accept Donation
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}

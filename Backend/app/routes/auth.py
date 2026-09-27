@@ -100,3 +100,48 @@ def get_current_user():
         return jsonify({"error": "User not found"}), 404
 
     return jsonify({"user": user.to_dict()}), 200
+
+
+@auth_bp.route("/profile", methods=["PATCH", "PUT"])
+@jwt_required()
+def update_profile():
+    user_id = get_jwt_identity()
+    user = User.query.get(user_id)
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+
+    data = request.get_json(silent=True) or {}
+    if "name" in data and data["name"]:
+        user.name = data["name"].strip()
+    if "phone" in data:
+        user.phone = data["phone"].strip() or None
+    if "address" in data:
+        user.address = data["address"].strip() or None
+    if "latitude" in data and data["latitude"] is not None:
+        try:
+            user.latitude = float(data["latitude"])
+        except (ValueError, TypeError):
+            pass
+    if "longitude" in data and data["longitude"] is not None:
+        try:
+            user.longitude = float(data["longitude"])
+        except (ValueError, TypeError):
+            pass
+
+    try:
+        db.session.commit()
+        # If recipient updated their location, automatically recalculate match distances
+        if user.role == "recipient":
+            try:
+                from .matching import generate_matches_for_recipient
+                generate_matches_for_recipient(user)
+            except Exception as e:
+                print("Error recalculating matches on profile update:", e)
+
+        return jsonify({
+            "message": "Profile and location updated successfully",
+            "user": user.to_dict()
+        }), 200
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": f"Failed to update profile: {str(e)}"}), 500

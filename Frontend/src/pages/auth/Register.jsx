@@ -12,8 +12,8 @@ export default function Register() {
     role: "donor",
     phone: "",
     address: "",
-    latitude: 12.9716,
-    longitude: 77.5946,
+    latitude: null,
+    longitude: null,
   });
 
   const [error, setError] = useState("");
@@ -26,7 +26,7 @@ export default function Register() {
     const { name, value } = e.target;
     setFormData((prev) => ({
       ...prev,
-      [name]: name === "latitude" || name === "longitude" ? parseFloat(value) || 0 : value,
+      [name]: name === "latitude" || name === "longitude" ? (value ? parseFloat(value) : null) : value,
     }));
   };
 

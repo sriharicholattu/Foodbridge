@@ -130,6 +130,34 @@ export default function VolunteerDashboard() {
                         </div>
                       </div>
                     )}
+
+                    {/* Transport Distance */}
+                    {donation.latitude && a.recipient?.latitude && (
+                      <div style={{
+                        display: "flex",
+                        alignItems: "center",
+                        gap: "0.4rem",
+                        padding: "0.35rem 0.6rem",
+                        background: "var(--bg-card)",
+                        borderRadius: "var(--radius-sm)",
+                        fontSize: "0.775rem",
+                        color: "var(--primary)",
+                        fontWeight: 600,
+                        marginTop: "0.2rem"
+                      }}>
+                        <Navigation size={12} />
+                        Route Distance: {
+                          (() => {
+                            const r = 6371.0;
+                            const dlat = ((Number(a.recipient.latitude) - Number(donation.latitude)) * Math.PI) / 180;
+                            const dlon = ((Number(a.recipient.longitude) - Number(donation.longitude)) * Math.PI) / 180;
+                            const x = Math.sin(dlat / 2) ** 2 + Math.cos((Number(donation.latitude) * Math.PI) / 180) * Math.cos((Number(a.recipient.latitude) * Math.PI) / 180) * Math.sin(dlon / 2) ** 2;
+                            const dist = Math.round(r * 2 * Math.atan2(Math.sqrt(x), Math.sqrt(1 - x)) * 10) / 10;
+                            return `${dist} km (Pickup ➔ Dropoff)`;
+                          })()
+                        }
+                      </div>
+                    )}
                   </div>
 
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "0.4rem", justifyContent: "flex-end" }}>
