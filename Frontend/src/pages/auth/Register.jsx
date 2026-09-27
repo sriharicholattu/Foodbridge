@@ -45,8 +45,17 @@ export default function Register() {
         default: navigate("/");
       }
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || "Registration failed. Please check the details entered.");
+      console.error("Registration error details:", err);
+      const serverMsg = err.response?.data?.error || err.response?.data?.message;
+      if (serverMsg) {
+        setError(serverMsg);
+      } else if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        setError(
+          `Network Error: Unable to reach API server. Please make sure VITE_API_URL is set in Vercel to your Render URL (ending in /api) and that your Render service is Live.`
+        );
+      } else {
+        setError(err.message || "Registration failed. Please check the details entered.");
+      }
     } finally {
       setLoading(false);
     }

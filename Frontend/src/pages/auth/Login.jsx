@@ -28,8 +28,15 @@ export default function Login() {
         default: navigate("/");
       }
     } catch (err) {
-      console.error(err);
-      setError(err.response?.data?.error || "Login failed. Please check your credentials.");
+      console.error("Login error details:", err);
+      const serverMsg = err.response?.data?.error || err.response?.data?.message;
+      if (serverMsg) {
+        setError(serverMsg);
+      } else if (err.code === "ERR_NETWORK" || err.message === "Network Error") {
+        setError("Network Error: Could not connect to API server. Please check your backend URL and network connection.");
+      } else {
+        setError(err.message || "Login failed. Please check your credentials.");
+      }
     } finally {
       setLoading(false);
     }
