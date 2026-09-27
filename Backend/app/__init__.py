@@ -16,8 +16,20 @@ def create_app():
 
     db.init_app(app)
     jwt.init_app(app)
-    frontend_url = os.getenv("FRONTEND_URL", "http://localhost:5173")
-    cors.init_app(app, origins=[frontend_url])
+    frontend_env = os.getenv("FRONTEND_URL", "http://localhost:5173")
+    allowed_origins = [o.strip() for o in frontend_env.split(",") if o.strip()]
+    if "*" in allowed_origins:
+        cors.init_app(app, resources={r"/*": {"origins": "*"}})
+    else:
+        # Also always include localhost:5173 for seamless local dev alongside production
+        if "http://localhost:5173" not in allowed_origins:
+            allowed_origins.append("http://localhost:5173")
+        cors.init_app(app, resources={r"/*": {"origins": allowed_origins}}, supports_credentials=True)
+
+    @app.route("/")
+    @app.route("/api/health")
+    def health_check():
+        return {"status": "ok", "message": "FoodBridge API is live and healthy"}, 200
 
     try:
         from .routes.auth import auth_bp
