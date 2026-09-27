@@ -1,0 +1,9 @@
+{
+  "venvPath": ".",
+  "venv": ".venv",
+  "extraPaths": [
+    "Backend",
+    ".venv/Lib/site-packages",
+    "C:/Users/sriha/AppData/Roaming/Python/Python314/site-packages"
+  ]
+}
